@@ -1,5 +1,6 @@
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import callback
 
 from .const import DOMAIN
@@ -14,8 +15,8 @@ class SveaSolarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required("username"): str,
-                vol.Required("password"): str,
+                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_PASSWORD): str,
             })
         )
 
