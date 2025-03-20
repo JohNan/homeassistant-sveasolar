@@ -1,0 +1,3 @@
+aiohttp
+homeassistant==2025.1.0
+pysveasolar==0.0.1
