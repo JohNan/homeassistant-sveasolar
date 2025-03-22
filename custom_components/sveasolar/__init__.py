@@ -7,6 +7,7 @@ from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_API
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pysveasolar.api import SveaSolarAPI
 from pysveasolar.token_manager import TokenManager
@@ -23,6 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     if hass.data.get(DOMAIN) is None:
         hass.data.setdefault(DOMAIN, {})
 
+    if CONF_PASSWORD and CONF_USERNAME not in entry.data:
+        raise ConfigEntryAuthFailed
 
     token_manager = SveaSolarTokenManager(hass, entry)
     try:
@@ -73,7 +76,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         self._api = api
 
     async def _async_update_data(self):
-        my_system = self._api.async_get_my_system()
+        my_system = await self._api.async_get_my_system()
         self._system_ids = self._extract_system_ids(my_system)
         return my_system
 
@@ -81,10 +84,17 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         async def battery_message_handler(msg):
             if isinstance(msg, BadgesUpdatedMessage):
                 if msg.data.has_battery:
-                    _LOGGER.info(f"Battery name: {msg.data.battery.battery_id}")
-                    _LOGGER.info(f"Battery name: {msg.data.battery.name}")
-                    _LOGGER.info(f"Battery status: {msg.data.battery.status}")
-                    _LOGGER.info(f"Battery SoC: {msg.data.battery.state_of_charge}")
+                    battery = msg.data.battery
+                    _LOGGER.info(f"Battery name: {battery.battery_id}")
+                    _LOGGER.info(f"Battery name: {battery.name}")
+                    _LOGGER.info(f"Battery status: {battery.status}")
+                    _LOGGER.info(f"Battery SoC: {battery.state_of_charge}")
+                    # self.data
+                    # data = {
+                    #     "batteries": ,
+                    #     "evs": None
+                    # }
+                    # self.async_set_updated_data(ws_data)
 
         async def ev_message_handler(msg):
             if isinstance(msg, VehicleDetailsUpdatedMessage):
@@ -130,7 +140,12 @@ class SveaSolarTokenManager(TokenManager):
 
         self._hass.config_entries.async_update_entry(
             self._entry,
-            data={CONF_REFRESH_TOKEN: refresh_token, CONF_ACCESS_TOKEN: access_token},
+            data={
+                CONF_REFRESH_TOKEN: refresh_token,
+                CONF_ACCESS_TOKEN: access_token,
+                CONF_USERNAME: self._entry.data.get(CONF_USERNAME),
+                CONF_PASSWORD: self._entry.data.get(CONF_PASSWORD)
+            },
         )
 
     @staticmethod
