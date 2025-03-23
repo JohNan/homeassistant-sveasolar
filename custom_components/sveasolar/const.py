@@ -1,3 +1,6 @@
 DOMAIN = "sveasolar"
 CONFIG_FLOW_TITLE = "Svea Solar"
 CONF_REFRESH_TOKEN = "refresh_token"
+SYSTEM_TYPE_BATTERY = "battery"
+SYSTEM_TYPE_LOCATION = "location"
+SYSTEM_TYPE_EV = "ev"
