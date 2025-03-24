@@ -56,9 +56,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
 
     entry.async_create_background_task(
         hass,
-        coordinator.ws_connect(),
+        coordinator.ws_battery_connect(),
         "websocket_task",
     )
+
+    for ev_id in coordinator.system_ids[SveaSolarSystemType.EV]:
+        entry.async_create_background_task(
+            hass,
+            coordinator.ws_ev_connect(ev_id),
+            "websocket_task",
+        )
 
     hass.data[DOMAIN][entry.entry_id] = entry.data
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -97,16 +104,16 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
 
         if self.data is None:
             return {
-                SveaSolarSystemType.BATTERY: [],
-                SveaSolarSystemType.EV: []
+                SveaSolarSystemType.BATTERY: {},
+                SveaSolarSystemType.EV: {}
             }
 
         return {
-            SveaSolarSystemType.BATTERY: self.data.get(SveaSolarSystemType.EV, []),
-            SveaSolarSystemType.EV: self.data.get(SveaSolarSystemType.EV, [])
+            SveaSolarSystemType.BATTERY: self.data.get(SveaSolarSystemType.EV, {}),
+            SveaSolarSystemType.EV: self.data.get(SveaSolarSystemType.EV, {})
         }
 
-    async def ws_connect(self):
+    async def ws_battery_connect(self):
         async def battery_message_handler(msg):
             if isinstance(msg, BadgesUpdatedMessage):
                 if msg.data.has_battery:
@@ -129,7 +136,11 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                     }
 
                     self.async_set_updated_data(data)
+                    self.async_update_listeners()
 
+        await self._api.async_home_websocket(battery_message_handler)
+
+    async def ws_ev_connect(self, ev_id: str):
         async def ev_message_handler(msg):
             if isinstance(msg, VehicleDetailsUpdatedMessage):
                 ev: VehicleDetailsData = msg.data
@@ -151,11 +162,9 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 }
 
                 self.async_set_updated_data(data)
+                self.async_update_listeners()
 
-        await self._api.async_home_websocket(battery_message_handler)
-
-        for ev_id in self.system_ids[SveaSolarSystemType.EV]:
-            await self._api.async_ev_websocket(ev_id, ev_message_handler)
+        await self._api.async_ev_websocket(ev_id, ev_message_handler)
 
     @staticmethod
     def _extract_system_ids(response) -> dict[SveaSolarSystemType:list]:

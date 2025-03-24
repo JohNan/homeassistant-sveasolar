@@ -1,5 +1,6 @@
 """Sensor platform for Svea Solar."""
 from dataclasses import dataclass
+from operator import attrgetter
 
 from homeassistant.components.sensor import SensorEntityDescription, SensorDeviceClass, SensorEntity
 from homeassistant.core import HomeAssistant
@@ -10,11 +11,13 @@ from custom_components.sveasolar import SveaSolarConfigEntry, SveaSolarDataUpdat
 from custom_components.sveasolar.entity import SveaSolarEntity
 
 TYPE_STATUS = "status"
+TYPE_CHARGING_STATUS = "vehicleStatus.chargingStatus"
 
 
 @dataclass(frozen=True, kw_only=True)
 class SveaSolarSensorEntityDescription(SensorEntityDescription):
     system_type: list[SveaSolarSystemType]
+
 
 SENSOR_DESCRIPTIONS = (
     SveaSolarSensorEntityDescription(
@@ -22,9 +25,16 @@ SENSOR_DESCRIPTIONS = (
         name="Status",
         translation_key="status",
         device_class=SensorDeviceClass.ENUM,
-        system_type=[SveaSolarSystemType.BATTERY, SveaSolarSystemType.EV]
+        system_type=[SveaSolarSystemType.BATTERY]
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_CHARGING_STATUS,
+        name="Charging Status",
+        device_class=SensorDeviceClass.ENUM,
+        system_type=[SveaSolarSystemType.EV]
     ),
 )
+
 
 async def async_setup_entry(
         hass: HomeAssistant,
@@ -41,15 +51,16 @@ async def async_setup_entry(
         if system_type in description.system_type
     )
 
+
 class SveaSolarSensor(SveaSolarEntity, SensorEntity):
     """Define an Ambient sensor."""
 
     def __init__(
-        self,
-        coordinator: SveaSolarDataUpdateCoordinator,
-        system_id: str,
-        system_type: SveaSolarSystemType,
-        description: EntityDescription
+            self,
+            coordinator: SveaSolarDataUpdateCoordinator,
+            system_id: str,
+            system_type: SveaSolarSystemType,
+            description: EntityDescription
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, system_id, system_type, description)
@@ -60,4 +71,4 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
         if self.get_entity is None:
             return None
 
-        return getattr(self.get_entity, self.entity_description.key)
+        return attrgetter(self.entity_description.key)(self.get_entity)
