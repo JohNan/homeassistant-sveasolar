@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from enum import Enum
 from platform import system
 
 from homeassistant.config_entries import ConfigEntry
@@ -14,7 +15,7 @@ from pysveasolar.token_manager import TokenManager
 from pysveasolar.token_managers.models import BadgesUpdatedMessage, KeepAliveMessage, VehicleDetailsUpdatedMessage, \
     VehicleDetailsData, Battery
 
-from .const import DOMAIN, CONF_REFRESH_TOKEN, SYSTEM_TYPE_BATTERY, SYSTEM_TYPE_EV
+from .const import DOMAIN, CONF_REFRESH_TOKEN
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [
@@ -22,6 +23,12 @@ PLATFORMS = [
 ]
 
 type SveaSolarConfigEntry = ConfigEntry[SveaSolarDataUpdateCoordinator]
+
+
+class SveaSolarSystemType(str, Enum):
+    BATTERY = "battery"
+    LOCATION = "location"
+    EV = "ev"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
@@ -59,14 +66,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
     entry.add_update_listener(async_reload_entry)
     return True
 
+
 async def async_unload_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
     await hass.config_entries.async_forward_entry_unload(entry, "sensor")
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
 
+
 async def async_reload_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry) -> None:
     """Reload the config entry when it changed."""
     await hass.config_entries.async_reload(entry.entry_id)
+
 
 class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, api: SveaSolarAPI):
@@ -79,12 +89,22 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         self._hass = hass
         self._entry = entry
         self._api = api
-        self.system_ids: dict[SYSTEM_TYPE, list] = {}
+        self.system_ids: dict[SveaSolarSystemType, list] = {}
 
     async def _async_update_data(self):
         my_system = await self._api.async_get_my_system()
         self.system_ids = self._extract_system_ids(my_system)
-        return my_system
+
+        if self.data is None:
+            return {
+                SveaSolarSystemType.BATTERY: [],
+                SveaSolarSystemType.EV: []
+            }
+
+        return {
+            SveaSolarSystemType.BATTERY: self.data.get(SveaSolarSystemType.EV, []),
+            SveaSolarSystemType.EV: self.data.get(SveaSolarSystemType.EV, [])
+        }
 
     async def ws_connect(self):
         async def battery_message_handler(msg):
@@ -96,7 +116,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.info(f"Battery status: {battery.status}")
                     _LOGGER.info(f"Battery SoC: {battery.state_of_charge}")
 
-                    batteries = self.data[SYSTEM_TYPE.BATTERY]
+                    batteries = self.data[SveaSolarSystemType.BATTERY]
 
                     if batteries is None:
                         batteries = {}
@@ -104,8 +124,8 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                     batteries[battery.battery_id] = battery
 
                     data = {
-                        SYSTEM_TYPE_BATTERY: batteries,
-                        SYSTEM_TYPE_EV: self.data[SYSTEM_TYPE_EV]
+                        SveaSolarSystemType.BATTERY: batteries,
+                        SveaSolarSystemType.EV: self.data[SveaSolarSystemType.EV]
                     }
 
                     self.async_set_updated_data(data)
@@ -118,7 +138,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.info(f"EV charging status: {ev.vehicleStatus.chargingStatus}")
                 _LOGGER.info(f"EV battery status: {ev.vehicleStatus.batteryLevel}")
 
-                evs = self.data[SYSTEM_TYPE.EV]
+                evs = self.data[SveaSolarSystemType.EV]
 
                 if evs is None:
                     evs = {}
@@ -126,29 +146,30 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 evs[ev.id] = ev
 
                 data = {
-                    SYSTEM_TYPE.BATTERY: self.data[SYSTEM_TYPE.BATTERY],
-                    SYSTEM_TYPE.EV: evs
+                    SveaSolarSystemType.BATTERY: self.data[SveaSolarSystemType.BATTERY],
+                    SveaSolarSystemType.EV: evs
                 }
 
                 self.async_set_updated_data(data)
 
         await self._api.async_home_websocket(battery_message_handler)
 
-        for ev_id in self.system_ids[SYSTEM_TYPE.EV]:
+        for ev_id in self.system_ids[SveaSolarSystemType.EV]:
             await self._api.async_ev_websocket(ev_id, ev_message_handler)
 
     @staticmethod
-    def _extract_system_ids(response) -> dict[SYSTEM_TYPE:list]:
+    def _extract_system_ids(response) -> dict[SveaSolarSystemType:list]:
         ev_ids = [ev['id'] for ev in response.get('electricVehicles', [])]
         battery_ids = [location['battery']['id'] for location in response.get('locations', []) if
                        location.get('battery')]
         location_ids = [location['id'] for location in response.get('locations', [])]
 
         return {
-            SYSTEM_TYPE.EV: ev_ids,
-            SYSTEM_TYPE.BATTERY: battery_ids,
-            SYSTEM_TYPE.LOCATION: location_ids
+            SveaSolarSystemType.EV: ev_ids,
+            SveaSolarSystemType.BATTERY: battery_ids,
+            SveaSolarSystemType.LOCATION: location_ids
         }
+
 
 class SveaSolarTokenManager(TokenManager):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
