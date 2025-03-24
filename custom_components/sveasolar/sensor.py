@@ -1,4 +1,5 @@
 """Sensor platform for Svea Solar."""
+import logging
 from dataclasses import dataclass
 from operator import attrgetter
 
@@ -9,6 +10,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from custom_components.sveasolar import SveaSolarConfigEntry, SveaSolarDataUpdateCoordinator, SveaSolarSystemType
 from custom_components.sveasolar.entity import SveaSolarEntity
+
+_LOGGER: logging.Logger = logging.getLogger(__package__)
 
 TYPE_STATUS = "status"
 TYPE_CHARGING_STATUS = "vehicleStatus.chargingStatus"
@@ -71,4 +74,6 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
         if self.get_entity is None:
             return None
 
-        return attrgetter(self.entity_description.key)(self.get_entity)
+        value = attrgetter(self.entity_description.key)(self.get_entity)
+        _LOGGER.info(f"Got value: {value} for key {self.entity_description.key}")
+        return value
