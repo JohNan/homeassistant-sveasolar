@@ -168,15 +168,15 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
 
     @staticmethod
     def _extract_system_ids(response) -> dict[SveaSolarSystemType:list]:
-        ev_ids = [ev['id'] for ev in response.get('electricVehicles', [])]
-        battery_ids = [location['battery']['id'] for location in response.get('locations', []) if
+        evs = [{ev['id']: ev['name']} for ev in response.get('electricVehicles', [])]
+        batteries = [{location['battery']['id']: location['battery']['name']} for location in response.get('locations', []) if
                        location.get('battery')]
-        location_ids = [location['id'] for location in response.get('locations', [])]
+        locations = [{location['id']: location['name']} for location in response.get('locations', [])]
 
         return {
-            SveaSolarSystemType.EV: ev_ids,
-            SveaSolarSystemType.BATTERY: battery_ids,
-            SveaSolarSystemType.LOCATION: location_ids
+            SveaSolarSystemType.EV: evs,
+            SveaSolarSystemType.BATTERY: batteries,
+            SveaSolarSystemType.LOCATION: locations
         }
 
 

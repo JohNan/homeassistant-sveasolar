@@ -1,12 +1,13 @@
 """ Base entity for Svea Solar"""
 
 from homeassistant.helpers.entity import Entity, EntityDescription
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pysveasolar.token_managers.models import Battery, VehicleDetailsData
 
 from custom_components.sveasolar import SveaSolarDataUpdateCoordinator, SveaSolarSystemType
 
 
-class SveaSolarEntity(Entity):
+class SveaSolarEntity(CoordinatorEntity[SveaSolarDataUpdateCoordinator]):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
@@ -15,8 +16,9 @@ class SveaSolarEntity(Entity):
             coordinator: SveaSolarDataUpdateCoordinator,
             system_id: str,
             system_type: SveaSolarSystemType,
-            description: EntityDescription,
+            description: EntityDescription
     ):
+        super().__init__(coordinator)
         self._system_type = system_type
         self._system_id = system_id
         self._coordinator = coordinator
