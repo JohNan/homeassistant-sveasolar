@@ -1,10 +1,11 @@
 """ Base entity for Svea Solar"""
-
-from homeassistant.helpers.entity import Entity, EntityDescription
+from homeassistant.components.sensor import ENTITY_ID_FORMAT
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from pysveasolar.token_managers.models import Battery, VehicleDetailsData
+from pysveasolar.models import Battery, VehicleDetailsData
 
-from custom_components.sveasolar import SveaSolarDataUpdateCoordinator, SveaSolarSystemType
+from custom_components.sveasolar import SveaSolarDataUpdateCoordinator, SveaSolarSystemType, DOMAIN
 
 
 class SveaSolarEntity(CoordinatorEntity[SveaSolarDataUpdateCoordinator]):
@@ -15,6 +16,7 @@ class SveaSolarEntity(CoordinatorEntity[SveaSolarDataUpdateCoordinator]):
             self,
             coordinator: SveaSolarDataUpdateCoordinator,
             system_id: str,
+            system_name: str,
             system_type: SveaSolarSystemType,
             description: EntityDescription
     ):
@@ -23,7 +25,12 @@ class SveaSolarEntity(CoordinatorEntity[SveaSolarDataUpdateCoordinator]):
         self._system_id = system_id
         self._coordinator = coordinator
         self._attr_unique_id = f"{system_id}_{description.key}"
+        self.entity_id = ENTITY_ID_FORMAT.format(f"{DOMAIN}_{system_name}_{description.key}")
         self.entity_description = description
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, system_id)},
+            name=system_name,
+        )
 
     @property
     def get_entity(self) -> Battery | VehicleDetailsData | None:

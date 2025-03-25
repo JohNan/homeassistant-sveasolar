@@ -8,19 +8,20 @@ from typing import Callable
 from homeassistant.components.sensor import SensorEntityDescription, SensorDeviceClass, SensorEntity
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
-from pysveasolar.token_managers.models import VehicleDetailsData, Battery
+from pysveasolar.models import VehicleDetailsData, Battery
 
 from custom_components.sveasolar import SveaSolarConfigEntry, SveaSolarDataUpdateCoordinator, SveaSolarSystemType
 from custom_components.sveasolar.entity import SveaSolarEntity
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
-TYPE_STATUS = "battery_status"
-TYPE_CHARGING_STATUS = "ev_charging_status"
-TYPE_BATTERY_LEVEL = "ev_battery_level"
+TYPE_EV_CHARGING_STATUS = "ev_charging_status"
+TYPE_EV_BATTERY_LEVEL = "ev_battery_level"
+
+TYPE_BATTERY_STATUS = "battery_status"
+TYPE_BATTERY_BATTERY_LEVEL = "battery_battery_level"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -31,7 +32,7 @@ class SveaSolarSensorEntityDescription(SensorEntityDescription):
 
 SENSOR_DESCRIPTIONS = (
     SveaSolarSensorEntityDescription(
-        key=TYPE_STATUS,
+        key=TYPE_BATTERY_STATUS,
         name="Status",
         translation_key="status",
         device_class=SensorDeviceClass.ENUM,
@@ -39,19 +40,27 @@ SENSOR_DESCRIPTIONS = (
         value_fn=attrgetter("status")
     ),
     SveaSolarSensorEntityDescription(
-        key=TYPE_CHARGING_STATUS,
+        key=TYPE_EV_CHARGING_STATUS,
         name="Charging Status",
         device_class=SensorDeviceClass.ENUM,
         system_type=[SveaSolarSystemType.EV],
         value_fn=attrgetter("vehicleStatus.chargingStatus")
     ),
     SveaSolarSensorEntityDescription(
-        key=TYPE_BATTERY_LEVEL,
+        key=TYPE_EV_BATTERY_LEVEL,
         name="Battery",
         device_class=SensorDeviceClass.BATTERY,
         native_unit_of_measurement=PERCENTAGE,
         system_type=[SveaSolarSystemType.EV],
         value_fn=attrgetter("vehicleStatus.batteryLevel")
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_BATTERY_BATTERY_LEVEL,
+        name="SoC",
+        device_class=SensorDeviceClass.BATTERY,
+        native_unit_of_measurement=PERCENTAGE,
+        system_type=[SveaSolarSystemType.BATTERY],
+        value_fn=attrgetter("state_of_charge")
     ),
 )
 
@@ -89,7 +98,7 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
             description: SveaSolarSensorEntityDescription
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, system_id, system_type, description)
+        super().__init__(coordinator, system_id, system_name, system_type, description)
         self.entity_description = description
 
     @property

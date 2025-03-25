@@ -1,21 +1,20 @@
-import asyncio
+import json
+import json
 import logging
 from enum import Enum
-from platform import system
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_API_KEY, CONF_ACCESS_TOKEN
+from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pysveasolar.api import SveaSolarAPI
 from pysveasolar.token_manager import TokenManager
-from pysveasolar.token_managers.models import BadgesUpdatedMessage, KeepAliveMessage, VehicleDetailsUpdatedMessage, \
+from pysveasolar.models import BadgesUpdatedMessage, VehicleDetailsUpdatedMessage, \
     VehicleDetailsData, Battery
 
-from .const import DOMAIN, CONF_REFRESH_TOKEN
+from .const import DOMAIN, CONF_REFRESH_TOKEN, MOCK_DATA
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [
@@ -57,14 +56,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
     entry.async_create_background_task(
         hass,
         coordinator.ws_battery_connect(),
-        "websocket_task",
+        "home_websocket_task",
     )
 
-    for ev_id in coordinator.system_ids[SveaSolarSystemType.EV]:
+    for system in coordinator.system_ids[SveaSolarSystemType.EV]:
         entry.async_create_background_task(
             hass,
-            coordinator.ws_ev_connect(ev_id),
-            "websocket_task",
+            coordinator.ws_ev_connect(next(iter(system))),
+            "ev_websocket_task",
         )
 
     hass.data[DOMAIN][entry.entry_id] = entry.data
@@ -99,8 +98,8 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         self.system_ids: dict[SveaSolarSystemType, list] = {}
 
     async def _async_update_data(self):
-        my_system = await self._api.async_get_my_system()
-        self.system_ids = self._extract_system_ids(my_system)
+        #TODO Uncomment this -> my_system = await self._api.async_get_my_system()
+        self.system_ids = self._extract_system_ids(json.loads(MOCK_DATA))
 
         if self.data is None:
             return {
@@ -109,12 +108,15 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             }
 
         return {
-            SveaSolarSystemType.BATTERY: self.data.get(SveaSolarSystemType.EV, {}),
+            SveaSolarSystemType.BATTERY: self.data.get(SveaSolarSystemType.BATTERY, {}),
             SveaSolarSystemType.EV: self.data.get(SveaSolarSystemType.EV, {})
         }
 
     async def ws_battery_connect(self):
-        async def battery_message_handler(msg):
+        async def on_connected():
+            _LOGGER.debug("Connected to SveaSolar Home WS")
+
+        async def on_data(msg):
             if isinstance(msg, BadgesUpdatedMessage):
                 if msg.data.has_battery:
                     battery: Battery = msg.data.battery
@@ -138,10 +140,16 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                     self.async_set_updated_data(data)
                     self.async_update_listeners()
 
-        await self._api.async_home_websocket(battery_message_handler)
+        await self._api.async_home_websocket(
+            data_callback=on_data,
+            connected_callback=on_connected
+        )
 
     async def ws_ev_connect(self, ev_id: str):
-        async def ev_message_handler(msg):
+        async def on_connected():
+            _LOGGER.debug("Connected to SveaSolar EV WS")
+
+        async def on_data(msg):
             if isinstance(msg, VehicleDetailsUpdatedMessage):
                 ev: VehicleDetailsData = msg.data
                 _LOGGER.info(f"EV id: {ev.id}")
@@ -164,7 +172,11 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 self.async_set_updated_data(data)
                 self.async_update_listeners()
 
-        await self._api.async_ev_websocket(ev_id, ev_message_handler)
+        await self._api.async_ev_websocket(
+            ev_id,
+            data_callback=on_data,
+            connected_callback=on_connected
+        )
 
     @staticmethod
     def _extract_system_ids(response) -> dict[SveaSolarSystemType:list]:
