@@ -29,6 +29,10 @@ class SveaSolarSystemType(str, Enum):
     LOCATION = "location"
     EV = "ev"
 
+class SveaSolarFetchType(str, Enum):
+    POLL = "poll"
+    WEBSOCKET = "websocket"
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
     """Set up this integration using UI."""
@@ -92,6 +96,12 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             config_entry=entry,
             name=DOMAIN
         )
+        self._battery_websocket = {}
+        self._battery_poll = {}
+        self._ev_websocket = {}
+        self._location_websocket = None
+        self._location_poll = None
+
         self._hass = hass
         self._entry = entry
         self._api = api
@@ -101,16 +111,11 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         #TODO Uncomment this -> my_system = await self._api.async_get_my_system()
         self.system_ids = self._extract_system_ids(json.loads(MOCK_DATA))
 
-        if self.data is None:
-            return {
-                SveaSolarSystemType.BATTERY: {},
-                SveaSolarSystemType.EV: {}
-            }
+        if len(self.system_ids[SveaSolarSystemType.BATTERY]) > 0:
+            battery = await self._api.async_get_battery(next(iter(self.system_ids[SveaSolarSystemType.BATTERY][0])))
+            self._battery_poll[battery.id] = battery
 
-        return {
-            SveaSolarSystemType.BATTERY: self.data.get(SveaSolarSystemType.BATTERY, {}),
-            SveaSolarSystemType.EV: self.data.get(SveaSolarSystemType.EV, {})
-        }
+        return self._data_update()
 
     async def ws_battery_connect(self):
         async def on_connected():
@@ -120,24 +125,14 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             if isinstance(msg, BadgesUpdatedMessage):
                 if msg.data.has_battery:
                     battery: Battery = msg.data.battery
-                    _LOGGER.info(f"Battery name: {battery.battery_id}")
+                    _LOGGER.info(f"Battery id: {battery.battery_id}")
                     _LOGGER.info(f"Battery name: {battery.name}")
                     _LOGGER.info(f"Battery status: {battery.status}")
                     _LOGGER.info(f"Battery SoC: {battery.state_of_charge}")
 
-                    batteries = self.data[SveaSolarSystemType.BATTERY]
+                    self._battery_websocket[battery.battery_id] = battery
 
-                    if batteries is None:
-                        batteries = {}
-
-                    batteries[battery.battery_id] = battery
-
-                    data = {
-                        SveaSolarSystemType.BATTERY: batteries,
-                        SveaSolarSystemType.EV: self.data[SveaSolarSystemType.EV]
-                    }
-
-                    self.async_set_updated_data(data)
+                    self.async_set_updated_data(self._data_update())
                     self.async_update_listeners()
 
         await self._api.async_home_websocket(
@@ -157,19 +152,8 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.info(f"EV charging status: {ev.vehicleStatus.chargingStatus}")
                 _LOGGER.info(f"EV battery status: {ev.vehicleStatus.batteryLevel}")
 
-                evs = self.data[SveaSolarSystemType.EV]
-
-                if evs is None:
-                    evs = {}
-
-                evs[ev.id] = ev
-
-                data = {
-                    SveaSolarSystemType.BATTERY: self.data[SveaSolarSystemType.BATTERY],
-                    SveaSolarSystemType.EV: evs
-                }
-
-                self.async_set_updated_data(data)
+                self._ev_websocket[ev.id] = ev
+                self.async_set_updated_data(self._data_update())
                 self.async_update_listeners()
 
         await self._api.async_ev_websocket(
@@ -177,6 +161,18 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             data_callback=on_data,
             connected_callback=on_connected
         )
+
+    def _data_update(self):
+        data = {
+            SveaSolarFetchType.POLL: {
+                SveaSolarSystemType.BATTERY: self._battery_poll,
+            },
+            SveaSolarFetchType.WEBSOCKET: {
+                SveaSolarSystemType.BATTERY: self._battery_websocket,
+                SveaSolarSystemType.EV: self._ev_websocket
+            }
+        }
+        return data
 
     @staticmethod
     def _extract_system_ids(response) -> dict[SveaSolarSystemType:list]:
