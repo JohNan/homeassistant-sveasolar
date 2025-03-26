@@ -10,7 +10,8 @@ from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfEnergy, UnitOfTi
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
-from pysveasolar.models import VehicleDetailsData, Battery
+from numpy._core.strings import isnumeric
+from pysveasolar.models import Battery, BatteryDetailsData, VehicleDetailsData, Location
 
 from custom_components.sveasolar import SveaSolarConfigEntry, SveaSolarDataUpdateCoordinator, SveaSolarSystemType, \
     SveaSolarFetchType
@@ -31,12 +32,14 @@ TYPE_BATTERY_DISCHARGED_ENERGY = "battery_discharged_energy"
 TYPE_BATTERY_CHARGED_ENERGY = "battery_charged_energy"
 TYPE_BATTERY_DISCHARGE_POWER = "battery_discharge_power"
 
+TYPE_LOCATION_SPOT_PRICE = "location_spot_price"
+
 
 @dataclass(frozen=True, kw_only=True)
 class SveaSolarSensorEntityDescription(SensorEntityDescription):
     fetch_type: SveaSolarFetchType
     system_type: list[SveaSolarSystemType]
-    value_fn: Callable[[VehicleDetailsData | Battery], StateType | datetime]
+    value_fn: Callable[[VehicleDetailsData | Battery | Location | BatteryDetailsData], StateType | datetime]
 
 
 SENSOR_DESCRIPTIONS = (
@@ -143,6 +146,19 @@ SENSOR_DESCRIPTIONS = (
         fetch_type=SveaSolarFetchType.WEBSOCKET,
         value_fn=attrgetter("summary.chargingTimeInHours")
     ),
+
+
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_SPOT_PRICE,
+        name="Price",
+        native_unit_of_measurement="SEK",
+        state_class = SensorStateClass.MEASUREMENT,
+        icon = "mdi:money",
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: 0 if location.spotPrice is None else location.spotPrice.value / 100
+        # value_fn=attrgetter("summary.chargingTimeInHours")
+    ),
 )
 
 
@@ -181,7 +197,11 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        if self.get_entity is None:
+        if self.get_entity() is None:
             return None
 
-        return self.entity_description.value_fn(self.get_entity)
+        value = self.entity_description.value_fn(self.get_entity())
+        if self.entity_description.key is TYPE_BATTERY_BATTERY_LEVEL and value.isnumeric() is False:
+            return attrgetter("stateOfCharge")(self.get_entity(alternative_fetch=True))
+
+        return value

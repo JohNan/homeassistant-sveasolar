@@ -99,8 +99,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         self._battery_websocket = {}
         self._battery_poll = {}
         self._ev_websocket = {}
-        self._location_websocket = None
-        self._location_poll = None
+        self._location_poll = {}
 
         self._hass = hass
         self._entry = entry
@@ -108,32 +107,35 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         self.system_ids: dict[SveaSolarSystemType, list] = {}
 
     async def _async_update_data(self):
-        #TODO Uncomment this -> my_system = await self._api.async_get_my_system()
-        self.system_ids = self._extract_system_ids(json.loads(MOCK_DATA))
+        my_system = await self._api.async_get_my_system()
+        self.system_ids = self._extract_system_ids(my_system)
 
         if len(self.system_ids[SveaSolarSystemType.BATTERY]) > 0:
             battery = await self._api.async_get_battery(next(iter(self.system_ids[SveaSolarSystemType.BATTERY][0])))
             self._battery_poll[battery.id] = battery
 
+        my_data = await self._api.async_get_my_data()
+        for location in my_data:
+            self._location_poll[location.id] = location
+
         return self._data_update()
 
     async def ws_battery_connect(self):
-        async def on_connected():
+        def on_connected():
             _LOGGER.debug("Connected to SveaSolar Home WS")
 
-        async def on_data(msg):
-            if isinstance(msg, BadgesUpdatedMessage):
-                if msg.data.has_battery:
-                    battery: Battery = msg.data.battery
-                    _LOGGER.info(f"Battery id: {battery.battery_id}")
-                    _LOGGER.info(f"Battery name: {battery.name}")
-                    _LOGGER.info(f"Battery status: {battery.status}")
-                    _LOGGER.info(f"Battery SoC: {battery.state_of_charge}")
+        def on_data(msg: BadgesUpdatedMessage):
+            if msg.data.has_battery:
+                battery: Battery = msg.data.battery
+                _LOGGER.info(f"Battery id: {battery.battery_id}")
+                _LOGGER.info(f"Battery name: {battery.name}")
+                _LOGGER.info(f"Battery status: {battery.status}")
+                _LOGGER.info(f"Battery SoC: {battery.state_of_charge}")
 
-                    self._battery_websocket[battery.battery_id] = battery
+                self._battery_websocket[battery.battery_id] = battery
 
-                    self.async_set_updated_data(self._data_update())
-                    self.async_update_listeners()
+                self.async_set_updated_data(self._data_update())
+                self.async_update_listeners()
 
         await self._api.async_home_websocket(
             data_callback=on_data,
@@ -141,20 +143,19 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     async def ws_ev_connect(self, ev_id: str):
-        async def on_connected():
+        def on_connected():
             _LOGGER.debug("Connected to SveaSolar EV WS")
 
-        async def on_data(msg):
-            if isinstance(msg, VehicleDetailsUpdatedMessage):
-                ev: VehicleDetailsData = msg.data
-                _LOGGER.info(f"EV id: {ev.id}")
-                _LOGGER.info(f"EV name: {ev.name}")
-                _LOGGER.info(f"EV charging status: {ev.vehicleStatus.chargingStatus}")
-                _LOGGER.info(f"EV battery status: {ev.vehicleStatus.batteryLevel}")
+        def on_data(msg: VehicleDetailsUpdatedMessage):
+            ev: VehicleDetailsData = msg.data
+            _LOGGER.info(f"EV id: {ev.id}")
+            _LOGGER.info(f"EV name: {ev.name}")
+            _LOGGER.info(f"EV charging status: {ev.vehicleStatus.chargingStatus}")
+            _LOGGER.info(f"EV battery status: {ev.vehicleStatus.batteryLevel}")
 
-                self._ev_websocket[ev.id] = ev
-                self.async_set_updated_data(self._data_update())
-                self.async_update_listeners()
+            self._ev_websocket[ev.id] = ev
+            self.async_set_updated_data(self._data_update())
+            self.async_update_listeners()
 
         await self._api.async_ev_websocket(
             ev_id,
@@ -166,6 +167,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         data = {
             SveaSolarFetchType.POLL: {
                 SveaSolarSystemType.BATTERY: self._battery_poll,
+                SveaSolarSystemType.LOCATION: self._location_poll,
             },
             SveaSolarFetchType.WEBSOCKET: {
                 SveaSolarSystemType.BATTERY: self._battery_websocket,

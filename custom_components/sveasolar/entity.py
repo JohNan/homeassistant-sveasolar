@@ -1,15 +1,11 @@
 """ Base entity for Svea Solar"""
-from idlelib.calltip import get_entity
 from operator import attrgetter
 
 from homeassistant.components.sensor import ENTITY_ID_FORMAT
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from pyric.utils.hardware import manufacturer
-from pysveasolar.battery import Battery as BatteryPoll
-from pysveasolar.models import Battery as BatteryLive, VehicleDetailsData
-
+from pysveasolar.models import BatteryDetailsData, VehicleDetailsData, Battery, Location
 
 from custom_components.sveasolar import SveaSolarDataUpdateCoordinator, SveaSolarSystemType, DOMAIN, SveaSolarFetchType
 
@@ -40,21 +36,30 @@ class SveaSolarEntity(CoordinatorEntity[SveaSolarDataUpdateCoordinator]):
     @property
     def device_info(self) -> DeviceInfo | None:
         """Return the device info."""
-        if self.get_entity is not None and hasattr(self.get_entity, "brand"):
-            return DeviceInfo(
-                identifiers={(DOMAIN, self._system_id)},
-                name=self._system_name,
-                manufacturer=attrgetter("brand")(self.get_entity)
-            )
+        entity = self.get_entity()
+        brand = None
+        location_id = None
+
+        if entity is not None and hasattr(entity, "brand"):
+            brand = attrgetter("brand")(entity)
+
+        if entity is not None and hasattr(entity, "locationId"):
+            location_id = (DOMAIN, attrgetter("locationId")(entity))
+
 
         return DeviceInfo(
             identifiers={(DOMAIN, self._system_id)},
-            name=self._system_name
+            name=self._system_name,
+            manufacturer=brand,
+            via_device=location_id
         )
 
-    @property
-    def get_entity(self) -> BatteryLive | VehicleDetailsData | BatteryPoll | None:
+    def get_entity(self, alternative_fetch=False) -> Battery | VehicleDetailsData | BatteryDetailsData | Location | None:
         if self._system_type not in self._coordinator.data[self._fetch_type]:
             return None
+
+        if alternative_fetch:
+            fetch_type = SveaSolarFetchType.POLL if self._fetch_type == SveaSolarFetchType.WEBSOCKET else self._fetch_type
+            return self._coordinator.data[fetch_type][self._system_type].get(self._system_id, None)
 
         return self._coordinator.data[self._fetch_type][self._system_type].get(self._system_id, None)

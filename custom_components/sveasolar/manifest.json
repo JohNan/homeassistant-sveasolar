@@ -3,7 +3,7 @@
   "name": "Svea Solar",
   "version": "1.0.0",
   "documentation": "https://www.example.com",
-  "requirements": ["pysveasolar==0.0.3"],
+  "requirements": ["pysveasolar==0.0.8"],
   "dependencies": [],
   "after_dependencies": ["http"],
   "codeowners": ["@JohNan"],
