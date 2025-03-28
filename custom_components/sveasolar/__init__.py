@@ -1,6 +1,7 @@
 import json
 import json
 import logging
+from datetime import timedelta
 from enum import Enum
 
 from homeassistant.config_entries import ConfigEntry
@@ -94,7 +95,8 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             config_entry=entry,
-            name=DOMAIN
+            name=DOMAIN,
+            update_interval=timedelta(seconds=90)
         )
         self._battery_websocket = {}
         self._battery_poll = {}

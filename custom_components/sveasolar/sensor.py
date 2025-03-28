@@ -189,7 +189,7 @@ SENSOR_DESCRIPTIONS = (
         native_unit_of_measurement=UnitOfPower.WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
-        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.sources if source.type == "Solar"]))
+        value_fn=lambda location: next((source.value for source in location.statusRightNow.sources if source.type == "Solar"), None)
     ),
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_BATTERY_POWER,
@@ -198,7 +198,7 @@ SENSOR_DESCRIPTIONS = (
         native_unit_of_measurement=UnitOfPower.WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
-        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.sources if source.type == "Battery"]))
+        value_fn=lambda location: next((source.value for source in location.statusRightNow.sources if source.type == "Battery"), None)
     ),
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_USAGE_POWER,
@@ -207,7 +207,7 @@ SENSOR_DESCRIPTIONS = (
         native_unit_of_measurement=UnitOfPower.WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
-        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.destinations if source.type == "Usage"]))
+        value_fn=lambda location: next((source.value for source in location.statusRightNow.destinations if source.type == "Usage"), None)
     ),
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_GRID_POWER,
@@ -216,7 +216,7 @@ SENSOR_DESCRIPTIONS = (
         native_unit_of_measurement=UnitOfPower.WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
-        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.destinations if source.type == "Grid"]))
+        value_fn=lambda location: next((source.value for source in location.statusRightNow.destinations if source.type == "Grid"), None)
     ),
 )
 
