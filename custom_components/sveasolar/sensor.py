@@ -3,15 +3,15 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from operator import attrgetter
-from typing import Callable
+from typing import Callable, Any, Mapping
 
 from homeassistant.components.sensor import SensorEntityDescription, SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfEnergy, UnitOfTime, EntityCategory, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
-from numpy._core.strings import isnumeric
 from pysveasolar.models import Battery, BatteryDetailsData, VehicleDetailsData, Location
+from homeassistant.util import dt as dt_util
 
 from custom_components.sveasolar import SveaSolarConfigEntry, SveaSolarDataUpdateCoordinator, SveaSolarSystemType, \
     SveaSolarFetchType
@@ -33,6 +33,12 @@ TYPE_BATTERY_CHARGED_ENERGY = "battery_charged_energy"
 TYPE_BATTERY_DISCHARGE_POWER = "battery_discharge_power"
 
 TYPE_LOCATION_SPOT_PRICE = "location_spot_price"
+TYPE_LOCATION_RATING = "location_rating"
+TYPE_LOCATION_STATUS = "location_status"
+TYPE_LOCATION_GRID_POWER = "location_grid_power"
+TYPE_LOCATION_SOLAR_POWER = "location_solar_power"
+TYPE_LOCATION_BATTERY_POWER = "location_battery_power"
+TYPE_LOCATION_USAGE_POWER = "location_usage_power"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -89,6 +95,7 @@ SENSOR_DESCRIPTIONS = (
         state_class = SensorStateClass.MEASUREMENT,
         system_type=[SveaSolarSystemType.BATTERY],
         fetch_type=SveaSolarFetchType.POLL,
+        suggested_display_precision=3,
         value_fn=attrgetter("dischargePower")
     ),
     SveaSolarSensorEntityDescription(
@@ -150,14 +157,66 @@ SENSOR_DESCRIPTIONS = (
 
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_SPOT_PRICE,
-        name="Price",
-        native_unit_of_measurement="SEK",
+        name="Energy Price",
+        native_unit_of_measurement="SEK/kWh",
         state_class = SensorStateClass.MEASUREMENT,
-        icon = "mdi:money",
+        icon = "mdi:cash",
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
+        suggested_display_precision=2,
         value_fn=lambda location: 0 if location.spotPrice is None else location.spotPrice.value / 100
-        # value_fn=attrgetter("summary.chargingTimeInHours")
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_RATING,
+        name="Rating",
+        device_class=SensorDeviceClass.ENUM,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: "N/A" if location.spotPrice is None else location.spotPrice.rating
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_STATUS,
+        name="Status",
+        device_class=SensorDeviceClass.ENUM,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=attrgetter("statusRightNow.status")
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_SOLAR_POWER,
+        name="Solar",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.sources if source.type == "Solar"]))
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_BATTERY_POWER,
+        name="Battery",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.sources if source.type == "Battery"]))
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_USAGE_POWER,
+        name="Usage",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.destinations if source.type == "Usage"]))
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_GRID_POWER,
+        name="Grid",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: next(iter([source.value for source in location.statusRightNow.destinations if source.type == "Grid"]))
     ),
 )
 
@@ -193,6 +252,29 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator, system_id, system_name, system_type, fetch_type, description)
         self.entity_description = description
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        if self.entity_description.key is TYPE_LOCATION_SPOT_PRICE:
+            if self.get_entity().spotPrice.tomorrow is not None:
+                tomorrow = ", ".join(str(round(data.value, 2)) for data in self.get_entity().spotPrice.tomorrow.data),
+                tomorrow_raw = [{"time": dt_util.parse_datetime(data.time).replace(tzinfo=dt_util.get_default_time_zone()), "price": round(data.value, 2), "rating": data.rating} for data in self.get_entity().spotPrice.tomorrow.data]
+                tomorrow_valid = True
+            else:
+                tomorrow = None
+                tomorrow_raw = None
+                tomorrow_valid = False
+            return {
+                "last_update": dt_util.parse_datetime(self.get_entity().spotPrice.time).isoformat(),
+                "today": ", ".join(str(round(data.value, 2)) for data in self.get_entity().spotPrice.today.data),
+                "today_raw": [{"time": dt_util.parse_datetime(data.time).replace(tzinfo=dt_util.get_default_time_zone()), "price": round(data.value, 2), "rating": data.rating} for data in self.get_entity().spotPrice.today.data],
+                "tomorrow": tomorrow,
+                "tomorrow_raw": tomorrow_raw,
+                "tomorrow_valid": tomorrow_valid,
+            }
+
+        return {
+        }
 
     @property
     def native_value(self):
