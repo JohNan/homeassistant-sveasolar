@@ -1,13 +1,14 @@
 {
   "domain": "sveasolar",
   "name": "Svea Solar",
-  "version": "1.0.0",
-  "documentation": "https://www.example.com",
-  "requirements": ["pysveasolar==0.0.8"],
-  "dependencies": [],
   "after_dependencies": ["http"],
   "codeowners": ["@JohNan"],
-  "loggers": ["pysveasolar"],
   "config_flow": true,
-  "iot_class": "cloud_polling"
+  "dependencies": [],
+  "documentation": "https://github.com/JohNan/homeassistant-sveasolar/",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/JohNan/homeassistant-sveasolar/issues",
+  "loggers": ["pysveasolar"],
+  "requirements": ["pysveasolar==0.1.0"],
+  "version": "1.0.0"
 }
