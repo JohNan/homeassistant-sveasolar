@@ -269,7 +269,7 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
         entity = self.get_entity()
         if self.entity_description.key is TYPE_LOCATION_SPOT_PRICE and isinstance(entity, Location):
             if entity.spotPrice.tomorrow is not None:
-                tomorrow = (", ".join(str(round(data.value, 2)) for data in entity.spotPrice.tomorrow.data),)
+                tomorrow = ", ".join(str(round(data.value, 2)) for data in entity.spotPrice.tomorrow.data)
                 tomorrow_raw = [
                     {
                         "time": dt_util.parse_datetime(data.time).replace(tzinfo=dt_util.get_default_time_zone()),
