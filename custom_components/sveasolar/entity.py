@@ -1,4 +1,5 @@
 """ Base entity for Svea Solar"""
+
 from operator import attrgetter
 
 from homeassistant.components.sensor import ENTITY_ID_FORMAT
@@ -15,13 +16,13 @@ class SveaSolarEntity(CoordinatorEntity[SveaSolarDataUpdateCoordinator]):
     _attr_should_poll = False
 
     def __init__(
-            self,
-            coordinator: SveaSolarDataUpdateCoordinator,
-            system_id: str,
-            system_name: str,
-            system_type: SveaSolarSystemType,
-            fetch_type: SveaSolarFetchType,
-            description: EntityDescription
+        self,
+        coordinator: SveaSolarDataUpdateCoordinator,
+        system_id: str,
+        system_name: str,
+        system_type: SveaSolarSystemType,
+        fetch_type: SveaSolarFetchType,
+        description: EntityDescription,
     ):
         super().__init__(coordinator)
         self._fetch_type = fetch_type
@@ -46,20 +47,20 @@ class SveaSolarEntity(CoordinatorEntity[SveaSolarDataUpdateCoordinator]):
         if entity is not None and hasattr(entity, "locationId"):
             location_id = (DOMAIN, attrgetter("locationId")(entity))
 
-
         return DeviceInfo(
-            identifiers={(DOMAIN, self._system_id)},
-            name=self._system_name,
-            manufacturer=brand,
-            via_device=location_id
+            identifiers={(DOMAIN, self._system_id)}, name=self._system_name, manufacturer=brand, via_device=location_id
         )
 
-    def get_entity(self, alternative_fetch=False) -> Battery | VehicleDetailsData | BatteryDetailsData | Location | None:
+    def get_entity(
+        self, alternative_fetch=False
+    ) -> Battery | VehicleDetailsData | BatteryDetailsData | Location | None:
         if self._system_type not in self._coordinator.data[self._fetch_type]:
             return None
 
         if alternative_fetch:
-            fetch_type = SveaSolarFetchType.POLL if self._fetch_type == SveaSolarFetchType.WEBSOCKET else self._fetch_type
+            fetch_type = (
+                SveaSolarFetchType.POLL if self._fetch_type == SveaSolarFetchType.WEBSOCKET else self._fetch_type
+            )
             return self._coordinator.data[fetch_type][self._system_type].get(self._system_id, None)
 
         return self._coordinator.data[self._fetch_type][self._system_type].get(self._system_id, None)
