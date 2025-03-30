@@ -189,44 +189,44 @@ SENSOR_DESCRIPTIONS = (
         key=TYPE_LOCATION_SOLAR_POWER,
         name="Solar",
         device_class=SensorDeviceClass.POWER,
-        native_unit_of_measurement=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
         value_fn=lambda location: next(
-            (source.value for source in location.statusRightNow.sources if source.type == "Solar"), None
+            (source.value for source in location.statusRightNow.sources if source.type == "Solar"), 0
         ),
     ),
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_BATTERY_POWER,
         name="Battery",
         device_class=SensorDeviceClass.POWER,
-        native_unit_of_measurement=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
         value_fn=lambda location: next(
-            (source.value for source in location.statusRightNow.sources if source.type == "Battery"), None
+            (source.value for source in location.statusRightNow.sources if source.type == "Battery"), 0
         ),
     ),
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_USAGE_POWER,
         name="Usage",
         device_class=SensorDeviceClass.POWER,
-        native_unit_of_measurement=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
         value_fn=lambda location: next(
-            (source.value for source in location.statusRightNow.destinations if source.type == "Usage"), None
+            (source.value for source in location.statusRightNow.destinations if source.type == "Usage"), 0
         ),
     ),
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_GRID_POWER,
         name="Grid",
         device_class=SensorDeviceClass.POWER,
-        native_unit_of_measurement=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
         value_fn=lambda location: next(
-            (source.value for source in location.statusRightNow.destinations if source.type == "Grid"), None
+            (source.value for source in location.statusRightNow.destinations if source.type == "Grid"), 0
         ),
     ),
 )
