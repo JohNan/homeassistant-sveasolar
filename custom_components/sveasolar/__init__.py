@@ -1,5 +1,3 @@
-import json
-import json
 import logging
 from datetime import timedelta
 from enum import Enum
@@ -11,16 +9,13 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pysveasolar.api import SveaSolarAPI
+from pysveasolar.models import BadgesUpdatedMessage, VehicleDetailsUpdatedMessage, VehicleDetailsData, Battery, Location
 from pysveasolar.token_manager import TokenManager
-from pysveasolar.models import BadgesUpdatedMessage, VehicleDetailsUpdatedMessage, \
-    VehicleDetailsData, Battery
 
-from .const import DOMAIN, CONF_REFRESH_TOKEN, MOCK_DATA
+from .const import DOMAIN, CONF_REFRESH_TOKEN
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = [
-    Platform.SENSOR
-]
+PLATFORMS = [Platform.SENSOR]
 
 type SveaSolarConfigEntry = ConfigEntry[SveaSolarDataUpdateCoordinator]
 
@@ -29,6 +24,7 @@ class SveaSolarSystemType(str, Enum):
     BATTERY = "battery"
     LOCATION = "location"
     EV = "ev"
+
 
 class SveaSolarFetchType(str, Enum):
     POLL = "poll"
@@ -49,10 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
     except Exception as exception:
         raise ConfigEntryAuthFailed("Failed to setup API") from exception
 
-    await api.async_login(
-        entry.data.get(CONF_USERNAME),
-        entry.data.get(CONF_PASSWORD)
-    )
+    await api.async_login(entry.data.get(CONF_USERNAME), entry.data.get(CONF_PASSWORD))
 
     coordinator = SveaSolarDataUpdateCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
@@ -91,17 +84,11 @@ async def async_reload_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry) -
 
 class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, api: SveaSolarAPI):
-        super().__init__(
-            hass,
-            _LOGGER,
-            config_entry=entry,
-            name=DOMAIN,
-            update_interval=timedelta(seconds=90)
-        )
-        self._battery_websocket = {}
-        self._battery_poll = {}
-        self._ev_websocket = {}
-        self._location_poll = {}
+        super().__init__(hass, _LOGGER, config_entry=entry, name=DOMAIN, update_interval=timedelta(seconds=90))
+        self._battery_websocket: dict[str, Battery] = {}
+        self._battery_poll: dict[str, Battery] = {}
+        self._ev_websocket: dict[str, VehicleDetailsData] = {}
+        self._location_poll: dict[str, Location] = {}
 
         self._hass = hass
         self._entry = entry
@@ -139,10 +126,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 self.async_set_updated_data(self._data_update())
                 self.async_update_listeners()
 
-        await self._api.async_home_websocket(
-            data_callback=on_data,
-            connected_callback=on_connected
-        )
+        await self._api.async_home_websocket(data_callback=on_data, connected_callback=on_connected)
 
     async def ws_ev_connect(self, ev_id: str):
         def on_connected():
@@ -159,11 +143,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             self.async_set_updated_data(self._data_update())
             self.async_update_listeners()
 
-        await self._api.async_ev_websocket(
-            ev_id,
-            data_callback=on_data,
-            connected_callback=on_connected
-        )
+        await self._api.async_ev_websocket(ev_id, data_callback=on_data, connected_callback=on_connected)
 
     def _data_update(self):
         data = {
@@ -173,22 +153,25 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             },
             SveaSolarFetchType.WEBSOCKET: {
                 SveaSolarSystemType.BATTERY: self._battery_websocket,
-                SveaSolarSystemType.EV: self._ev_websocket
-            }
+                SveaSolarSystemType.EV: self._ev_websocket,
+            },
         }
         return data
 
     @staticmethod
-    def _extract_system_ids(response) -> dict[SveaSolarSystemType:list]:
-        evs = [{ev['id']: ev['name']} for ev in response.get('electricVehicles', [])]
-        batteries = [{location['battery']['id']: location['battery']['name']} for location in response.get('locations', []) if
-                       location.get('battery')]
-        locations = [{location['id']: location['name']} for location in response.get('locations', [])]
+    def _extract_system_ids(response) -> dict[SveaSolarSystemType, list]:
+        evs = [{ev["id"]: ev["name"]} for ev in response.get("electricVehicles", [])]
+        batteries = [
+            {location["battery"]["id"]: location["battery"]["name"]}
+            for location in response.get("locations", [])
+            if location.get("battery")
+        ]
+        locations = [{location["id"]: location["name"]} for location in response.get("locations", [])]
 
         return {
             SveaSolarSystemType.EV: evs,
             SveaSolarSystemType.BATTERY: batteries,
-            SveaSolarSystemType.LOCATION: locations
+            SveaSolarSystemType.LOCATION: locations,
         }
 
 
@@ -212,7 +195,7 @@ class SveaSolarTokenManager(TokenManager):
                 CONF_REFRESH_TOKEN: refresh_token,
                 CONF_ACCESS_TOKEN: access_token,
                 CONF_USERNAME: self._entry.data.get(CONF_USERNAME),
-                CONF_PASSWORD: self._entry.data.get(CONF_PASSWORD)
+                CONF_PASSWORD: self._entry.data.get(CONF_PASSWORD),
             },
         )
 

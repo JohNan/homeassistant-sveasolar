@@ -14,7 +14,7 @@ from .const import DOMAIN, CONF_REFRESH_TOKEN, CONFIG_FLOW_TITLE
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 
-class SveaSolarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class SveaSolarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     entry: ConfigEntry
 
     VERSION = 1
@@ -31,10 +31,7 @@ class SveaSolarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug(user_input)
         if user_input is not None:
             try:
-                await self._test_credentials(
-                    user_input[CONF_USERNAME],
-                    user_input[CONF_PASSWORD]
-                )
+                await self._test_credentials(user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
 
                 # Copy the maybe possibly credentials
                 user_input[CONF_ACCESS_TOKEN] = self._token_manager.access_token
@@ -60,10 +57,7 @@ class SveaSolarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                await self._test_credentials(
-                    user_input[CONF_USERNAME],
-                    user_input[CONF_PASSWORD]
-                )
+                await self._test_credentials(user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
 
                 # Copy the maybe possibly credentials
                 user_input[CONF_ACCESS_TOKEN] = self._token_manager.access_token
