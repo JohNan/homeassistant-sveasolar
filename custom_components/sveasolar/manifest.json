@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/JohNan/homeassistant-sveasolar/issues",
   "loggers": ["pysveasolar"],
   "requirements": ["pysveasolar==0.1.0"],
-  "version": "1.0.0"
+  "version": "0.1.0"
 }
