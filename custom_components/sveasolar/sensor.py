@@ -276,7 +276,7 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
                         "price": round(data.value, 2),
                         "rating": data.rating,
                     }
-                    for data in iter(entity.spotPrice.tomorrow.data)
+                    for data in entity.spotPrice.tomorrow.data
                 ]
                 tomorrow_valid = True
             else:
@@ -285,14 +285,14 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
                 tomorrow_valid = False
             return {
                 "last_update": dt_util.parse_datetime(entity.spotPrice.time).isoformat(),
-                "today": ", ".join(str(round(data.value, 2)) for data in iter(entity.spotPrice.today.data)),
+                "today": ", ".join(str(round(data.value, 2)) for data in entity.spotPrice.today.data),
                 "today_raw": [
                     {
                         "time": dt_util.parse_datetime(data.time).replace(tzinfo=dt_util.get_default_time_zone()),
                         "price": round(data.value, 2),
                         "rating": data.rating,
                     }
-                    for data in iter(entity.spotPrice.today.data)
+                    for data in entity.spotPrice.today.data
                 ],
                 "tomorrow": tomorrow,
                 "tomorrow_raw": tomorrow_raw,
