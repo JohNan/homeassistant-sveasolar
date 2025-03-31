@@ -7,7 +7,7 @@
 [![Project Maintenance][maintenance-shield]][user_profile]
 [![BuyMeCoffee][buymecoffeebadge]][buymecoffee]
 
-A custom component designed for [Home Assistant](https://www.home-assistant.io) with the capability to interact with
+A custom component designed for [Home Assistant](https://www.home-assistant.io) with the capability to show information about your systems integrated with Svea Solar
 
 
 
