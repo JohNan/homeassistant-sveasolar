@@ -40,9 +40,11 @@ TYPE_BATTERY_DISCHARGE_POWER = "battery_discharge_power"
 TYPE_LOCATION_SPOT_PRICE = "location_spot_price"
 TYPE_LOCATION_RATING = "location_rating"
 TYPE_LOCATION_STATUS = "location_status"
-TYPE_LOCATION_GRID_POWER = "location_grid_power"
-TYPE_LOCATION_SOLAR_POWER = "location_solar_power"
-TYPE_LOCATION_BATTERY_POWER = "location_battery_power"
+TYPE_LOCATION_TO_GRID_POWER = "location_to_grid_power"
+TYPE_LOCATION_FROM_GRID_POWER = "location_from_grid_power"
+TYPE_LOCATION_FROM_SOLAR_POWER = "location_from_solar_power"
+TYPE_LOCATION_FROM_BATTERY_POWER = "location_from_battery_power" 
+TYPE_LOCATION_TO_BATTERY_POWER = "location_to_battery_power"
 TYPE_LOCATION_USAGE_POWER = "location_usage_power"
 
 
@@ -186,8 +188,8 @@ SENSOR_DESCRIPTIONS = (
         value_fn=attrgetter("statusRightNow.status"),
     ),
     SveaSolarSensorEntityDescription(
-        key=TYPE_LOCATION_SOLAR_POWER,
-        name="Solar",
+        key=TYPE_LOCATION_FROM_SOLAR_POWER,
+        name="From Solar",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
@@ -197,14 +199,25 @@ SENSOR_DESCRIPTIONS = (
         ),
     ),
     SveaSolarSensorEntityDescription(
-        key=TYPE_LOCATION_BATTERY_POWER,
-        name="Battery",
+        key=TYPE_LOCATION_FROM_BATTERY_POWER,
+        name="From Battery",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
         value_fn=lambda location: next(
             (source.value for source in location.statusRightNow.sources if source.type == "Battery"), 0
+        ),
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_TO_BATTERY_POWER,
+        name="To Battery",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: next(
+            (source.value for source in location.statusRightNow.destinations if source.type == "Battery"), 0
         ),
     ),
     SveaSolarSensorEntityDescription(
@@ -219,14 +232,25 @@ SENSOR_DESCRIPTIONS = (
         ),
     ),
     SveaSolarSensorEntityDescription(
-        key=TYPE_LOCATION_GRID_POWER,
-        name="Grid",
+        key=TYPE_LOCATION_TO_GRID_POWER,
+        name="To Grid",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
         fetch_type=SveaSolarFetchType.POLL,
         value_fn=lambda location: next(
             (source.value for source in location.statusRightNow.destinations if source.type == "Grid"), 0
+        ),
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_LOCATION_FROM_GRID_POWER,
+        name="From Grid",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        system_type=[SveaSolarSystemType.LOCATION],
+        fetch_type=SveaSolarFetchType.POLL,
+        value_fn=lambda location: next(
+            (source.value for source in location.statusRightNow.sources if source.type == "Grid"), 0
         ),
     ),
 )
