@@ -244,7 +244,7 @@ SENSOR_DESCRIPTIONS = (
     ),
     SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_FROM_GRID_POWER,
-        name="To Grid",
+        name="From Grid",
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         system_type=[SveaSolarSystemType.LOCATION],
