@@ -43,7 +43,7 @@ TYPE_LOCATION_STATUS = "location_status"
 TYPE_LOCATION_TO_GRID_POWER = "location_to_grid_power"
 TYPE_LOCATION_FROM_GRID_POWER = "location_from_grid_power"
 TYPE_LOCATION_FROM_SOLAR_POWER = "location_from_solar_power"
-TYPE_LOCATION_FROM_BATTERY_POWER = "location_from_battery_power" 
+TYPE_LOCATION_FROM_BATTERY_POWER = "location_from_battery_power"
 TYPE_LOCATION_TO_BATTERY_POWER = "location_to_battery_power"
 TYPE_LOCATION_USAGE_POWER = "location_usage_power"
 
