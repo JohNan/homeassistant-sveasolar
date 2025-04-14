@@ -9,6 +9,6 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/JohNan/homeassistant-sveasolar/issues",
   "loggers": ["pysveasolar"],
-  "requirements": ["pysveasolar==0.1.0"],
+  "requirements": ["pysveasolar==0.1.1"],
   "version": "0.1.0"
 }

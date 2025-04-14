@@ -1,15 +1,24 @@
+import asyncio
 import logging
 from datetime import timedelta
 from enum import Enum
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN
-from homeassistant.core import HomeAssistant
+from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN, EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pysveasolar.api import SveaSolarAPI
-from pysveasolar.models import BadgesUpdatedMessage, VehicleDetailsUpdatedMessage, VehicleDetailsData, Battery, Location
+from pysveasolar.errors import WebsocketError
+from pysveasolar.models import (
+    BadgesUpdatedMessage,
+    VehicleDetailsUpdatedMessage,
+    VehicleDetailsData,
+    Battery,
+    Location,
+    BatteryDetailsData,
+)
 from pysveasolar.token_manager import TokenManager
 
 from .const import DOMAIN, CONF_REFRESH_TOKEN
@@ -51,18 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
-    entry.async_create_background_task(
-        hass,
-        coordinator.ws_battery_connect(),
-        "home_websocket_task",
-    )
-
-    for system in coordinator.system_ids[SveaSolarSystemType.EV]:
-        entry.async_create_background_task(
-            hass,
-            coordinator.ws_ev_connect(next(iter(system))),
-            "ev_websocket_task",
-        )
+    coordinator.async_websockets_connect()
 
     hass.data[DOMAIN][entry.entry_id] = entry.data
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -86,7 +84,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, api: SveaSolarAPI):
         super().__init__(hass, _LOGGER, config_entry=entry, name=DOMAIN, update_interval=timedelta(seconds=90))
         self._battery_websocket: dict[str, Battery] = {}
-        self._battery_poll: dict[str, Battery] = {}
+        self._battery_poll: dict[str, BatteryDetailsData] = {}
         self._ev_websocket: dict[str, VehicleDetailsData] = {}
         self._location_poll: dict[str, Location] = {}
 
@@ -94,6 +92,89 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         self._entry = entry
         self._api = api
         self.system_ids: dict[SveaSolarSystemType, list] = {}
+        self._home_websocket_reconnect_task: asyncio.Task | None = None
+        self._ev_websocket_reconnect_tasks: dict[str, asyncio.Task | None] = {}
+
+    def async_websockets_connect(self) -> None:
+        self._home_websocket_reconnect_task = asyncio.create_task(self._async_start_home_websocket_loop())
+
+        for system in self.system_ids[SveaSolarSystemType.EV]:
+            system = next(iter(system))
+            self._ev_websocket_reconnect_tasks[system] = asyncio.create_task(
+                self._async_start_ev_websocket_loop(system)
+            )
+
+        async def async_websocket_disconnect_listener(_: Event) -> None:
+            """Define an event handler to disconnect from the websocket."""
+            await self._async_cancel_home_websocket_loop()
+            for disconnect_system in self.system_ids[SveaSolarSystemType.EV]:
+                disconnect_system = next(iter(disconnect_system))
+                await self._async_cancel_ev_websocket_loop(disconnect_system)
+
+            self._entry.async_on_unload(
+                self._hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, async_websocket_disconnect_listener)
+            )
+
+    async def _async_start_home_websocket_loop(self) -> None:
+        """Start a websocket reconnection loop."""
+        try:
+            await self.ws_battery_connect()
+        except asyncio.CancelledError:
+            _LOGGER.debug("Request to cancel websocket loop received")
+            raise
+        except WebsocketError as err:
+            _LOGGER.error("Failed to connect to websocket: %s", err)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Unknown exception while connecting to websocket: %s", err)
+
+        _LOGGER.debug("Reconnecting to websocket")
+        await self._async_cancel_home_websocket_loop()
+        self._home_websocket_reconnect_task = self._hass.async_create_task(self._async_start_home_websocket_loop())
+
+    async def _async_start_ev_websocket_loop(self, system: str) -> None:
+        """Start a websocket reconnection loop."""
+        try:
+            await self.ws_ev_connect(system)
+        except asyncio.CancelledError:
+            _LOGGER.debug("Request to cancel websocket loop received")
+            raise
+        except WebsocketError as err:
+            _LOGGER.error("Failed to connect to websocket: %s", err)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Unknown exception while connecting to websocket: %s", err)
+
+        _LOGGER.debug("Reconnecting to websocket")
+        await self._async_cancel_ev_websocket_loop(system)
+        self._websocket_reconnect_task = self._hass.async_create_task(self._async_start_home_websocket_loop())
+
+    async def _async_cancel_home_websocket_loop(self) -> None:
+        """Stop any existing websocket reconnection loop."""
+        if self._home_websocket_reconnect_task:
+            self._home_websocket_reconnect_task.cancel()
+            try:
+                await self._home_websocket_reconnect_task
+            except asyncio.CancelledError:
+                _LOGGER.debug("Websocket reconnection task successfully canceled")
+                self._home_websocket_reconnect_task = None
+
+            await self._api.async_home_websocket_disconnect()
+
+    async def _async_cancel_ev_websocket_loop(self, system: str) -> None:
+        """Stop any existing websocket reconnection loop."""
+        if system in self._ev_websocket_reconnect_tasks.keys():
+            task = self._ev_websocket_reconnect_tasks[system]
+            if not task:
+                return
+
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                _LOGGER.debug("Websocket reconnection task successfully canceled")
+                self._ev_websocket_reconnect_tasks[system] = None
+
+            # TODO: Pass system
+            await self._api.async_ev_websocket_disconnect(system)
 
     async def _async_update_data(self):
         my_system = await self._api.async_get_my_system()
@@ -110,6 +191,9 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         return self._data_update()
 
     async def ws_battery_connect(self):
+        def on_keep_alive(msg):
+            _LOGGER.debug("Keep Alive from SveaSolar Home WS")
+
         def on_connected():
             _LOGGER.debug("Connected to SveaSolar Home WS")
 
@@ -126,7 +210,9 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 self.async_set_updated_data(self._data_update())
                 self.async_update_listeners()
 
-        await self._api.async_home_websocket(data_callback=on_data, connected_callback=on_connected)
+        await self._api.async_home_websocket(
+            data_callback=on_data, connected_callback=on_connected, keep_alive_callback=on_keep_alive
+        )
 
     async def ws_ev_connect(self, ev_id: str):
         def on_connected():
