@@ -3,7 +3,7 @@ from typing import Any, Mapping
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult, SOURCE_RECONFIGURE
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from pysveasolar.api import SveaSolarAPI
@@ -40,6 +40,9 @@ class SveaSolarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ig
                 _LOGGER.error("Validating credentials failed - %s", exp)
                 self._errors["base"] = "auth"
                 return await self._show_config_form(user_input)
+
+            if self.source == SOURCE_RECONFIGURE:
+                return self.async_update_reload_and_abort(self._get_reconfigure_entry(), data={**user_input})
 
             return self.async_create_entry(title=CONFIG_FLOW_TITLE, data={**user_input})
 
@@ -80,6 +83,10 @@ class SveaSolarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ig
             ),
             errors=errors,
         )
+
+    async def async_step_reconfigure(self, user_input: Mapping[str, Any]) -> ConfigFlowResult:
+        """Handle reconfiguration."""
+        return await self.async_step_user()
 
     async def _show_config_form(self, user_input):  # pylint: disable=unused-argument
         """Show the configuration form to set credentials."""

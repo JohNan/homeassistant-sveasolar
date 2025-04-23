@@ -332,7 +332,7 @@ class SveaSolarSensor(SveaSolarEntity, SensorEntity):
             return None
 
         value = self.entity_description.value_fn(self.get_entity())
-        if self.entity_description.key is TYPE_BATTERY_BATTERY_LEVEL and value.isnumeric() is False:
+        if self.entity_description.key is TYPE_BATTERY_BATTERY_LEVEL and value and value.isnumeric() is False:
             return attrgetter("stateOfCharge")(self.get_entity(alternative_fetch=True))
 
         return value

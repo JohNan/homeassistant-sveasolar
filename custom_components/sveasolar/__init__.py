@@ -3,14 +3,15 @@ import logging
 from datetime import timedelta
 from enum import Enum
 
+from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant, Event
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from pysveasolar.api import SveaSolarAPI
-from pysveasolar.errors import WebsocketError
+from pysveasolar.errors import WebsocketError, AuthenticationError
 from pysveasolar.models import (
     BadgesUpdatedMessage,
     VehicleDetailsUpdatedMessage,
@@ -77,6 +78,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
 
 async def async_reload_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry) -> None:
     """Reload the config entry when it changed."""
+    await entry.runtime_data.async_websocket_disconnect()
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -95,6 +97,10 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         self._home_websocket_reconnect_task: asyncio.Task | None = None
         self._ev_websocket_reconnect_tasks: dict[str, asyncio.Task | None] = {}
 
+    async def _async_setup(self):
+        my_system = await self._api.async_get_my_system()
+        self.system_ids = self._extract_system_ids(my_system)
+
     def async_websockets_connect(self) -> None:
         self._home_websocket_reconnect_task = asyncio.create_task(self._async_start_home_websocket_loop())
 
@@ -105,15 +111,20 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
             )
 
         async def async_websocket_disconnect_listener(_: Event) -> None:
-            """Define an event handler to disconnect from the websocket."""
-            await self._async_cancel_home_websocket_loop()
-            for disconnect_system in self.system_ids[SveaSolarSystemType.EV]:
-                disconnect_system = next(iter(disconnect_system))
-                await self._async_cancel_ev_websocket_loop(disconnect_system)
+            await self.async_websocket_disconnect()
 
-            self._entry.async_on_unload(
-                self._hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, async_websocket_disconnect_listener)
-            )
+        self._entry.async_on_unload(
+            self._hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, async_websocket_disconnect_listener)
+        )
+
+        self._entry.async_on_unload(self.async_websocket_disconnect)
+
+    async def async_websocket_disconnect(self):
+        """Define an event handler to disconnect from the websocket."""
+        await self._async_cancel_home_websocket_loop()
+        for disconnect_system in self.system_ids[SveaSolarSystemType.EV]:
+            disconnect_system = next(iter(disconnect_system))
+            await self._async_cancel_ev_websocket_loop(disconnect_system)
 
     async def _async_start_home_websocket_loop(self) -> None:
         """Start a websocket reconnection loop."""
@@ -173,22 +184,39 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("Websocket reconnection task successfully canceled")
                 self._ev_websocket_reconnect_tasks[system] = None
 
-            # TODO: Pass system
             await self._api.async_ev_websocket_disconnect(system)
 
     async def _async_update_data(self):
-        my_system = await self._api.async_get_my_system()
-        self.system_ids = self._extract_system_ids(my_system)
+        try:
+            if len(self.system_ids[SveaSolarSystemType.BATTERY]) > 0:
+                battery = await self._api.async_get_battery(next(iter(self.system_ids[SveaSolarSystemType.BATTERY][0])))
+                self._battery_poll[battery.id] = battery
 
-        if len(self.system_ids[SveaSolarSystemType.BATTERY]) > 0:
-            battery = await self._api.async_get_battery(next(iter(self.system_ids[SveaSolarSystemType.BATTERY][0])))
-            self._battery_poll[battery.id] = battery
+            my_data = await self._api.async_get_my_data()
+            for location in my_data:
+                self._location_poll[location.id] = location
 
-        my_data = await self._api.async_get_my_data()
-        for location in my_data:
-            self._location_poll[location.id] = location
+            return self._data_update()
+        except AuthenticationError as err:
+            _LOGGER.warning(f"Failed to refresh token, trying to login again: {err}")
+            await self.async_websocket_disconnect()
+            await self._async_login()
+            self.async_websockets_connect()
+            return await self._async_update_data()
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with API: {err}")
 
-        return self._data_update()
+    async def _async_login(self):
+        try:
+            await self._api.async_login(
+                username=self._entry.data.get(CONF_USERNAME), password=self._entry.data.get(CONF_PASSWORD)
+            )
+        except ClientError as err:
+            _LOGGER.warning(f"Failed to login. Raising Re-Auth: {err}")
+            raise ConfigEntryAuthFailed from err
+        except Exception as err:
+            _LOGGER.warning(f"Failed to login due to exception: {err}")
+            raise UpdateFailed from err
 
     async def ws_battery_connect(self):
         def on_keep_alive(msg):
@@ -200,10 +228,10 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         def on_data(msg: BadgesUpdatedMessage):
             if msg.data.has_battery:
                 battery: Battery = msg.data.battery
-                _LOGGER.info(f"Battery id: {battery.battery_id}")
-                _LOGGER.info(f"Battery name: {battery.name}")
-                _LOGGER.info(f"Battery status: {battery.status}")
-                _LOGGER.info(f"Battery SoC: {battery.state_of_charge}")
+                _LOGGER.debug(f"Battery id: {battery.battery_id}")
+                _LOGGER.debug(f"Battery name: {battery.name}")
+                _LOGGER.debug(f"Battery status: {battery.status}")
+                _LOGGER.debug(f"Battery SoC: {battery.state_of_charge}")
 
                 self._battery_websocket[battery.battery_id] = battery
 
@@ -220,10 +248,10 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
 
         def on_data(msg: VehicleDetailsUpdatedMessage):
             ev: VehicleDetailsData = msg.data
-            _LOGGER.info(f"EV id: {ev.id}")
-            _LOGGER.info(f"EV name: {ev.name}")
-            _LOGGER.info(f"EV charging status: {ev.vehicleStatus.chargingStatus}")
-            _LOGGER.info(f"EV battery status: {ev.vehicleStatus.batteryLevel}")
+            _LOGGER.debug(f"EV id: {ev.id}")
+            _LOGGER.debug(f"EV name: {ev.name}")
+            _LOGGER.debug(f"EV charging status: {ev.vehicleStatus.chargingStatus}")
+            _LOGGER.debug(f"EV battery status: {ev.vehicleStatus.batteryLevel}")
 
             self._ev_websocket[ev.id] = ev
             self.async_set_updated_data(self._data_update())
@@ -262,7 +290,7 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
 
 
 class SveaSolarTokenManager(TokenManager):
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
+    def __init__(self, hass: HomeAssistant, entry: SveaSolarConfigEntry):
         self._hass = hass
         self._entry = entry
         refresh_token = entry.data.get(CONF_REFRESH_TOKEN)
