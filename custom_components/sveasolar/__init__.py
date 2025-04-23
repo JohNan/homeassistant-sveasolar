@@ -78,7 +78,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
 
 async def async_reload_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry) -> None:
     """Reload the config entry when it changed."""
-    await entry.runtime_data.async_websocket_disconnect()
     await hass.config_entries.async_reload(entry.entry_id)
 
 
