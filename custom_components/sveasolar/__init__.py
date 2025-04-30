@@ -52,15 +52,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SveaSolarConfigEntry):
     token_manager = SveaSolarTokenManager(hass, entry)
     try:
         api = SveaSolarAPI(session=async_get_clientsession(hass), token_manager=token_manager)
+        await api.async_login(entry.data.get(CONF_USERNAME), entry.data.get(CONF_PASSWORD))
     except Exception as exception:
         raise ConfigEntryAuthFailed("Failed to setup API") from exception
-
-    await api.async_login(entry.data.get(CONF_USERNAME), entry.data.get(CONF_PASSWORD))
 
     coordinator = SveaSolarDataUpdateCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
+    if not coordinator.last_update_success:
+        raise ConfigEntryNotReady from coordinator.last_exception 
+    
     coordinator.async_websockets_connect()
 
     hass.data[DOMAIN][entry.entry_id] = entry.data
