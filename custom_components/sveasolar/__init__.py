@@ -134,6 +134,9 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         except asyncio.CancelledError:
             _LOGGER.debug("Request to cancel websocket loop received")
             raise
+        except AuthenticationError as err:
+            _LOGGER.warning(f"Authentication failed, trying to login again: {err}")
+            await self._async_login()
         except WebsocketError as err:
             _LOGGER.error("Failed to connect to websocket: %s", err)
         except Exception as err:  # noqa: BLE001
@@ -150,6 +153,9 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
         except asyncio.CancelledError:
             _LOGGER.debug("Request to cancel websocket loop received")
             raise
+        except AuthenticationError as err:
+            _LOGGER.warning(f"Authentication failed, trying to login again: {err}")
+            await self._async_login()
         except WebsocketError as err:
             _LOGGER.error("Failed to connect to websocket: %s", err)
         except Exception as err:  # noqa: BLE001
@@ -157,7 +163,9 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("Reconnecting to websocket")
         await self._async_cancel_ev_websocket_loop(system)
-        self._websocket_reconnect_task = self._hass.async_create_task(self._async_start_home_websocket_loop())
+        self._ev_websocket_reconnect_tasks[system] = self._hass.async_create_task(
+            self._async_start_ev_websocket_loop(system)
+        )
 
     async def _async_cancel_home_websocket_loop(self) -> None:
         """Stop any existing websocket reconnection loop."""
