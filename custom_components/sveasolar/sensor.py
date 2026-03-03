@@ -165,6 +165,43 @@ SENSOR_DESCRIPTIONS = (
         value_fn=attrgetter("summary.chargingTimeInHours"),
     ),
     SveaSolarSensorEntityDescription(
+        key=TYPE_EV_SMART_CHARGING_STATUS,
+        name="Smart Charging Status",
+        device_class=SensorDeviceClass.ENUM,
+        icon="mdi:ev-plug-type2",
+        system_type=[SveaSolarSystemType.EV],
+        fetch_type=SveaSolarFetchType.WEBSOCKET,
+        value_fn=attrgetter("smartChargingStatus.smartChargingStatus"),
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_EV_SMART_CHARGING_IS_CHARGING,
+        name="Smart Charging Active",
+        device_class=SensorDeviceClass.ENUM,
+        icon="mdi:battery-charging",
+        system_type=[SveaSolarSystemType.EV],
+        fetch_type=SveaSolarFetchType.WEBSOCKET,
+        value_fn=lambda ev: "Active"
+        if getattr(getattr(ev, "smartChargingStatus", None), "isCharging", False)
+        else "Inactive",
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_EV_SMART_CHARGING_DEADLINE,
+        name="Smart Charging Deadline",
+        icon="mdi:clock-outline",
+        system_type=[SveaSolarSystemType.EV],
+        fetch_type=SveaSolarFetchType.WEBSOCKET,
+        value_fn=attrgetter("smartChargingStatus.dailyDeadline"),
+    ),
+    SveaSolarSensorEntityDescription(
+        key=TYPE_EV_SMART_CHARGING_CHARGE_LIMIT,
+        name="Protective Charge Limit",
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:battery-lock",
+        system_type=[SveaSolarSystemType.EV],
+        fetch_type=SveaSolarFetchType.WEBSOCKET,
+        value_fn=attrgetter("smartChargingStatus.protectiveChargeLimit"),
+    ),
+    SveaSolarSensorEntityDescription(
         key=TYPE_LOCATION_SPOT_PRICE,
         name="Energy Price",
         native_unit_of_measurement="SEK/kWh",
@@ -256,40 +293,6 @@ SENSOR_DESCRIPTIONS = (
         value_fn=lambda location: next(
             (source.value for source in location.statusRightNow.sources if source.type == "Grid"), 0
         ),
-    ),
-    SveaSolarSensorEntityDescription(
-        key=TYPE_EV_SMART_CHARGING_STATUS,
-        name="Smart Charging Status",
-        device_class=SensorDeviceClass.ENUM,
-        icon="mdi:ev-plug-type2",
-        system_type=[SveaSolarSystemType.EV],
-        fetch_type=SveaSolarFetchType.WEBSOCKET,
-        value_fn=attrgetter("smartChargingStatus.smartChargingStatus"),
-    ),
-    SveaSolarSensorEntityDescription(
-        key=TYPE_EV_SMART_CHARGING_IS_CHARGING,
-        name="Smart Charging Active",
-        icon="mdi:battery-charging",
-        system_type=[SveaSolarSystemType.EV],
-        fetch_type=SveaSolarFetchType.WEBSOCKET,
-        value_fn=attrgetter("smartChargingStatus.isCharging"),
-    ),
-    SveaSolarSensorEntityDescription(
-        key=TYPE_EV_SMART_CHARGING_DEADLINE,
-        name="Smart Charging Deadline",
-        icon="mdi:clock-outline",
-        system_type=[SveaSolarSystemType.EV],
-        fetch_type=SveaSolarFetchType.WEBSOCKET,
-        value_fn=attrgetter("smartChargingStatus.dailyDeadline"),
-    ),
-    SveaSolarSensorEntityDescription(
-        key=TYPE_EV_SMART_CHARGING_CHARGE_LIMIT,
-        name="Protective Charge Limit",
-        native_unit_of_measurement=PERCENTAGE,
-        icon="mdi:battery-lock",
-        system_type=[SveaSolarSystemType.EV],
-        fetch_type=SveaSolarFetchType.WEBSOCKET,
-        value_fn=attrgetter("smartChargingStatus.protectiveChargeLimit"),
     ),
 )
 
