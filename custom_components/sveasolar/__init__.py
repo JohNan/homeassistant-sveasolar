@@ -201,9 +201,18 @@ class SveaSolarDataUpdateCoordinator(DataUpdateCoordinator):
                 battery = await self._api.async_get_battery(next(iter(self.system_ids[SveaSolarSystemType.BATTERY][0])))
                 self._battery_poll[battery.id] = battery
 
-            my_data = await self._api.async_get_my_data()
-            for location in my_data:
-                self._location_poll[location.id] = location
+            try:
+                my_data = await self._api.async_get_my_data()
+                for location in my_data:
+                    self._location_poll[location.id] = location
+            except (AuthenticationError, asyncio.CancelledError):
+                raise
+            except Exception as my_data_err:
+                _LOGGER.warning(
+                    "Could not fetch location data (my-data endpoint may be unavailable): %s",
+                    my_data_err,
+                )
+                self._location_poll.clear()
 
             return self._data_update()
         except AuthenticationError as err:
